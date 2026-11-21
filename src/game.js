@@ -445,11 +445,11 @@ export class Game {
         this.level = 2;
         this.audio.setMusicLevel(2);
       }
-      if (this.time >= 50 && this.level < 3) {
+      if (this.time >= CFG.RUN_TIME - 20 && this.level < 3) {
         this.level = 3;
         this.audio.setMusicLevel(3);
         this.audio.rush();
-        this.fx.text('RUSH!!', this.W / 2, this.H * 0.4, { size: 66, color: '#ff5f7e', life: 1.4, vy: 0, sub: 'ラスト10秒', tag: 'tier', replace: 'tier' });
+        this.fx.text('RUSH!!', this.W / 2, this.H * 0.4, { size: 66, color: '#ff5f7e', life: 1.4, vy: 0, sub: 'ラスト20秒', tag: 'tier', replace: 'tier' });
         this.fx.shake(0.3);
       }
       const left = CFG.RUN_TIME - this.time;

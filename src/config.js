@@ -57,14 +57,15 @@ export const ENEMY = {
 // 連鎖倍率：1 + min(連鎖数 ÷ 10, 4)
 export const chainMultiplier = (combo) => 1 + Math.min(combo / 10, 4);
 
-// 時間ごとの出現テーブル（間は線形補間。50秒でラッシュに切り替え）
+// 時間ごとの出現テーブル（間は線形補間。40秒＝残り20秒でラッシュに切り替え）
 export const PHASES = [
   { t: 0,     interval: 2.4,  min: 5, max: 7,  bomb: 0.12, thunder: 0.0,  speed: 1.0,  cap: 26 },
   { t: 10,    interval: 2.0,  min: 6, max: 9,  bomb: 0.15, thunder: 0.10, speed: 1.08, cap: 40 },
-  { t: 30,    interval: 1.55, min: 7, max: 11, bomb: 0.17, thunder: 0.12, speed: 1.25, cap: 60 },
-  { t: 49.99, interval: 1.3,  min: 8, max: 12, bomb: 0.18, thunder: 0.13, speed: 1.35, cap: 66 },
-  { t: 50,    interval: 0.55, min: 11, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.5,  cap: 120 },
-  { t: 999,   interval: 0.55, min: 11, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.5,  cap: 120 },
+  { t: 30,    interval: 1.55, min: 7, max: 11, bomb: 0.17, thunder: 0.12, speed: 1.22, cap: 60 },
+  { t: 39.99, interval: 1.4,  min: 7, max: 11, bomb: 0.18, thunder: 0.13, speed: 1.27, cap: 64 },
+  { t: 40,    interval: 0.6,  min: 11, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.3,  cap: 120 },
+  { t: 60,    interval: 0.5,  min: 12, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.5,  cap: 120 },
+  { t: 999,   interval: 0.5,  min: 12, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.55, cap: 120 },
 ];
 
 // 序盤の固定出現（0〜10秒：操作を即理解させる）
@@ -75,9 +76,9 @@ export const OPENING = [
   { t: 7.2, formation: 'clump', side: 'right',  n: 9, bombs: 2, thunders: 0 },
   { t: 9.6, formation: 'clump', side: 'top',    n: 9, bombs: 1, thunders: 2 }, // 最初の雷撃型
   // RUSH開始：3方向から大群を一気に投入し、百連鎖を狙える密度を作る
-  { t: 50.0, formation: 'clump', side: 'top',   n: 18, bombs: 4, thunders: 2 },
-  { t: 50.4, formation: 'clump', side: 'left',  n: 16, bombs: 3, thunders: 2 },
-  { t: 50.8, formation: 'clump', side: 'right', n: 16, bombs: 3, thunders: 2 },
+  { t: 40.0, formation: 'clump', side: 'top',   n: 18, bombs: 4, thunders: 2 },
+  { t: 40.4, formation: 'clump', side: 'left',  n: 16, bombs: 3, thunders: 2 },
+  { t: 40.8, formation: 'clump', side: 'right', n: 16, bombs: 3, thunders: 2 },
 ];
 export const OPENING_END = 10.5;
 
@@ -99,11 +100,11 @@ export const TIERS = [
 
 // リザルトのランク（スコア下限）
 export const RANKS = [
-  { min: 30000, rank: 'SS', color: '#ffffff' },
-  { min: 20000, rank: 'S',  color: '#ffe36b' },
-  { min: 12500, rank: 'A',  color: '#ff9f43' },
-  { min: 6500,  rank: 'B',  color: '#6ff3ff' },
-  { min: 2500,  rank: 'C',  color: '#a5b4ff' },
+  { min: 40000, rank: 'SS', color: '#ffffff' },
+  { min: 28000, rank: 'S',  color: '#ffe36b' },
+  { min: 17000, rank: 'A',  color: '#ff9f43' },
+  { min: 9000,  rank: 'B',  color: '#6ff3ff' },
+  { min: 3500,  rank: 'C',  color: '#a5b4ff' },
   { min: 0,     rank: 'D',  color: '#8a8fa8' },
 ];
 
