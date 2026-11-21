@@ -35,7 +35,7 @@ export const CFG = {
   GAUGE_BONUS_CAP: 0.5,    // 1回の斬撃で得られる追加回復の上限（無限連射防止）
 
   // --- 敵・連鎖 ---
-  MAX_ENEMIES: 80,         // 同時敵数の上限
+  MAX_ENEMIES: 120,        // 同時敵数の上限（通常時は出現テーブルの cap、RUSH中のみ最大120）
   MAX_CHAIN_EVENTS: 200,   // 1発動あたりの連鎖処理上限
   MAX_CHAIN_GEN: 40,       // 連鎖世代数の上限
   BOMB_RADIUS: 90,         // 爆弾型の爆風半径
@@ -63,8 +63,8 @@ export const PHASES = [
   { t: 10,    interval: 2.0,  min: 6, max: 9,  bomb: 0.15, thunder: 0.10, speed: 1.08, cap: 40 },
   { t: 30,    interval: 1.55, min: 7, max: 11, bomb: 0.17, thunder: 0.12, speed: 1.25, cap: 60 },
   { t: 49.99, interval: 1.3,  min: 8, max: 12, bomb: 0.18, thunder: 0.13, speed: 1.35, cap: 66 },
-  { t: 50,    interval: 0.8,  min: 8, max: 13, bomb: 0.19, thunder: 0.14, speed: 1.5,  cap: 80 },
-  { t: 999,   interval: 0.8,  min: 8, max: 13, bomb: 0.19, thunder: 0.14, speed: 1.5,  cap: 80 },
+  { t: 50,    interval: 0.55, min: 11, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.5,  cap: 120 },
+  { t: 999,   interval: 0.55, min: 11, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.5,  cap: 120 },
 ];
 
 // 序盤の固定出現（0〜10秒：操作を即理解させる）
@@ -74,6 +74,10 @@ export const OPENING = [
   { t: 4.8, formation: 'line',  side: 'bottom', n: 6, bombs: 1, thunders: 0 },
   { t: 7.2, formation: 'clump', side: 'right',  n: 9, bombs: 2, thunders: 0 },
   { t: 9.6, formation: 'clump', side: 'top',    n: 9, bombs: 1, thunders: 2 }, // 最初の雷撃型
+  // RUSH開始：3方向から大群を一気に投入し、百連鎖を狙える密度を作る
+  { t: 50.0, formation: 'clump', side: 'top',   n: 18, bombs: 4, thunders: 2 },
+  { t: 50.4, formation: 'clump', side: 'left',  n: 16, bombs: 3, thunders: 2 },
+  { t: 50.8, formation: 'clump', side: 'right', n: 16, bombs: 3, thunders: 2 },
 ];
 export const OPENING_END = 10.5;
 
