@@ -100,9 +100,9 @@ export const TIERS = [
 
 // リザルトのランク（スコア下限）
 export const RANKS = [
-  { min: 40000, rank: 'SS', color: '#ffffff' },
-  { min: 28000, rank: 'S',  color: '#ffe36b' },
-  { min: 17000, rank: 'A',  color: '#ff9f43' },
+  { min: 30000, rank: 'SS', color: '#ffffff' },
+  { min: 23000, rank: 'S',  color: '#ffe36b' },
+  { min: 16000, rank: 'A',  color: '#ff9f43' },
   { min: 9000,  rank: 'B',  color: '#6ff3ff' },
   { min: 3500,  rank: 'C',  color: '#a5b4ff' },
   { min: 0,     rank: 'D',  color: '#8a8fa8' },
