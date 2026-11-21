@@ -37,7 +37,9 @@ function readSafe() {
 }
 
 function layout() {
-  const vw = window.innerWidth, vh = window.innerHeight;
+  // body の大きさ基準（通常は画面全体。埋め込み先で余白がある場合も収まる）
+  const vw = document.body.clientWidth || window.innerWidth;
+  const vh = document.body.clientHeight || window.innerHeight;
   const landscapeMobile = coarse && vw > vh;
   ui.setRotate(landscapeMobile);
   if (landscapeMobile && game.mode === 'play') game.setPaused(true);
