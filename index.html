@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#05050c">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="CHAIN SLASH — 一太刀から、百連鎖へ。時を止めて一筆の斬撃ルートを描き、爆発と電撃の連鎖で敵の群れを一掃する、スマホ縦画面向け60秒スコアアタック。">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CHAIN SLASH">
+  <meta property="og:title" content="CHAIN SLASH">
+  <meta property="og:description" content="一太刀から、百連鎖へ。時を止めて斬撃ルートを描き、連鎖爆破で群れを一掃しろ。">
+  <meta property="og:type" content="website">
+  <title>CHAIN SLASH</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="game" aria-label="ゲーム画面"></canvas>
+    <div id="safe-probe" aria-hidden="true"></div>
+
+    <!-- ===== HUD ===== -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div id="hud-time-block" class="hud-block hud-time">
+          <span class="hud-label">TIME</span>
+          <span id="hud-time" class="hud-num">60</span>
+        </div>
+        <div class="hud-block hud-score">
+          <span class="hud-label">SCORE</span>
+          <span id="hud-score" class="hud-num">0</span>
+          <span class="hud-sub">MAX CHAIN <b id="hud-maxchain">0</b></span>
+        </div>
+        <div class="hud-block hud-right">
+          <div id="hud-hp" class="hp" aria-label="残り体力"><i></i><i></i><i></i></div>
+          <div class="hud-buttons">
+            <button id="btn-mute" class="icon-btn" aria-label="サウンド切替">
+              <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
+              <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"/></svg>
+            </button>
+            <button id="btn-pause" class="icon-btn" aria-label="一時停止">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="hint-move" class="hint hint-move">
+        <div class="hint-finger"></div>
+        <span>ドラッグで移動</span>
+      </div>
+      <div id="hint-slash" class="hint hint-slash">
+        <span>斬ボタンで<br>時を止めろ！</span>
+        <div class="hint-arrow"></div>
+      </div>
+
+      <button id="btn-slash" class="slash-btn" data-state="ready" aria-label="斬撃（時間停止）">
+        <span class="slash-ring"></span>
+        <span class="slash-core">
+          <span class="slash-kanji">斬</span>
+          <span id="slash-state" class="slash-state">READY</span>
+        </span>
+      </button>
+    </div>
+
+    <!-- ===== タイトル ===== -->
+    <section id="screen-title" class="screen title">
+      <div class="title-inner">
+        <h1 class="logo-wrap">
+          <svg class="logo" viewBox="0 0 400 152" role="img" aria-label="CHAIN SLASH">
+            <defs>
+              <linearGradient id="lg-slash" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#6ff3ff"/>
+                <stop offset="0.5" stop-color="#ffffff"/>
+                <stop offset="1" stop-color="#ff6fa8"/>
+              </linearGradient>
+              <clipPath id="clip-top"><polygon points="-20,-20 420,-20 420,45 -20,110"/></clipPath>
+              <clipPath id="clip-bot"><polygon points="-20,110 420,45 420,172 -20,172"/></clipPath>
+              <g id="logo-text">
+                <text x="200" y="68" text-anchor="middle" textLength="330" lengthAdjust="spacingAndGlyphs" fill="#ffffff" font-size="80" font-weight="900" font-style="italic" font-family="Avenir Next, Arial Black, Segoe UI Black, Roboto, Helvetica Neue, Arial, sans-serif">CHAIN</text>
+                <text x="200" y="142" text-anchor="middle" textLength="330" lengthAdjust="spacingAndGlyphs" fill="url(#lg-slash)" font-size="80" font-weight="900" font-style="italic" font-family="Avenir Next, Arial Black, Segoe UI Black, Roboto, Helvetica Neue, Arial, sans-serif">SLASH</text>
+              </g>
+            </defs>
+            <g class="half top" clip-path="url(#clip-top)"><use href="#logo-text"/></g>
+            <g class="half bot" clip-path="url(#clip-bot)"><use href="#logo-text"/></g>
+            <line class="cut" x1="-12" y1="108.3" x2="412" y2="46.7" pathLength="1"/>
+          </svg>
+        </h1>
+        <p class="tagline">一太刀から、百連鎖へ。</p>
+
+        <button id="btn-start" class="btn btn-primary btn-big">START<span class="btn-sub">タップで開始</span></button>
+
+        <div class="best-line">BEST <b id="title-best">0</b><span class="sep">/</span>MAX CHAIN <b id="title-chain">0</b></div>
+
+        <div class="howto">
+          <div><em>移動</em>画面をドラッグ</div>
+          <div><em>斬撃</em>斬ボタン → なぞる → 離す</div>
+        </div>
+
+        <ul class="legend">
+          <li><canvas data-kind="normal"></canvas><b>通常型</b><span>連鎖なし</span></li>
+          <li><canvas data-kind="bomb"></canvas><b>爆弾型</b><span>周囲を爆破</span></li>
+          <li><canvas data-kind="thunder"></canvas><b>雷撃型</b><span>近くへ電撃</span></li>
+        </ul>
+
+        <div class="settings">
+          <button class="toggle" data-setting="sound">サウンド<b>ON</b></button>
+          <button class="toggle" data-setting="vibe">振動<b>ON</b></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== リザルト ===== -->
+    <section id="screen-result" class="screen result hidden">
+      <div class="result-inner">
+        <div id="res-reason" class="res-reason">TIME UP</div>
+        <div class="res-rank-wrap">
+          <div class="res-rank-label">RANK</div>
+          <div id="res-rank" class="res-rank">A</div>
+        </div>
+        <div class="res-score-label">SCORE</div>
+        <div id="res-score" class="res-score">0</div>
+        <div class="res-newbest-slot"><div id="res-newbest" class="res-newbest hidden">NEW RECORD!</div></div>
+        <div class="res-stats">
+          <div class="stat"><span>最大連鎖</span><b id="res-chain">0</b></div>
+          <div class="stat"><span>撃破数</span><b id="res-kills">0</b></div>
+          <div class="stat"><span>自己ベスト</span><b id="res-best">0</b></div>
+        </div>
+        <p id="res-goal" class="res-goal"></p>
+        <p id="res-tip" class="res-tip"></p>
+        <button id="btn-retry" class="btn btn-primary btn-big btn-jp">もう一回<span class="btn-sub">ONE MORE</span></button>
+        <button id="btn-title" class="btn btn-ghost">タイトルへ</button>
+        <p id="res-debug" class="res-debug hidden"></p>
+      </div>
+    </section>
+
+    <!-- ===== ポーズ ===== -->
+    <section id="screen-pause" class="screen pause hidden">
+      <h2>PAUSE</h2>
+      <button id="btn-resume" class="btn btn-primary btn-big btn-jp">再開</button>
+      <div class="settings">
+        <button class="toggle" data-setting="sound">サウンド<b>ON</b></button>
+        <button class="toggle" data-setting="vibe">振動<b>ON</b></button>
+      </div>
+      <button id="btn-quit" class="btn btn-ghost">タイトルへ</button>
+    </section>
+
+    <!-- ===== 横向き案内 ===== -->
+    <div id="rotate" class="screen rotate hidden">
+      <div class="rotate-icon" aria-hidden="true"></div>
+      <p>端末を縦向きにしてプレイしてください</p>
+    </div>
+
+    <div id="debug" class="hidden"></div>
+  </div>
+
+  <noscript><p class="noscript">このゲームを遊ぶには JavaScript を有効にしてください。</p></noscript>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
