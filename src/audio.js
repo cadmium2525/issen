@@ -277,6 +277,26 @@ export class AudioEngine {
     this._noise(t, 0.09, 0.3, out, 'bandpass', 6000, 3000, 1.5);
   }
 
+  // 分裂型：鋭い金属音が四方へ散る
+  split(pan) {
+    if (!this._gate('split', 0.04)) return;
+    const t = this.ctx.currentTime;
+    const out = this._out(pan);
+    this._noise(t, 0.12, 0.3, out, 'highpass', 3000, 9000, 0.8, 0.002);
+    this._tone('square', 1800, 600, t, 0.12, 0.07, out, 0.002);
+    this._tone('triangle', 2400, 900, t + 0.02, 0.1, 0.06, out, 0.002);
+  }
+
+  // 吸引型：吸い込むうなり（上昇スウィープ）
+  vortex(pan) {
+    if (!this._gate('vortex', 0.08)) return;
+    const t = this.ctx.currentTime;
+    const out = this._out(pan);
+    this._tone('sawtooth', 70, 420, t, 0.42, 0.1, out, 0.05);
+    this._tone('sine', 110, 660, t, 0.42, 0.18, out, 0.05);
+    this._noise(t, 0.42, 0.22, out, 'bandpass', 300, 3000, 2, 0.08);
+  }
+
   // 連鎖数に応じて音程が上がる
   blip(combo, pan) {
     if (!this._gate('blip', 0.026)) return;

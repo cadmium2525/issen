@@ -96,6 +96,7 @@ export class Effects {
     this.parts.length = 0;
     this.rings = [];
     this.bolts = [];
+    this.beams = [];
     this.trails = [];
     this.ghosts = [];
     this.pieces = [];
@@ -173,6 +174,11 @@ export class Effects {
     this.bolts.push({ x1, y1, x2, y2, life: 0.26, max: 0.26, color, pts: jagged(x1, y1, x2, y2, 14), refresh: 0.04 });
     this.flare(x2, y2, 46, color, 0.18, 1.4);
     this.sparks(x2, y2, 7, '#c9f7ff', 140, 360, null, TAU, 1.6);
+  }
+
+  // 分裂型の破片：始点から終点へ伸びる光線
+  beam(x1, y1, x2, y2, color, grow = 0.2) {
+    this.beams.push({ x1, y1, x2, y2, color, grow, t: 0, life: grow + 0.22 });
   }
 
   slashTrail(pts) {
@@ -286,6 +292,11 @@ export class Effects {
         b.pts = jagged(b.x1, b.y1, b.x2, b.y2, 14);
       }
       if (b.life <= 0) this.bolts.splice(i, 1);
+    }
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      const b = this.beams[i];
+      b.t += d;
+      if (b.t >= b.life) this.beams.splice(i, 1);
     }
     for (let i = this.trails.length - 1; i >= 0; i--) {
       this.trails[i].life -= dt; // 斬撃の閃光は実時間で消える
@@ -414,6 +425,30 @@ export class Effects {
         const s = p.size * (1 + (p.grow - 1) * easeOutCubic(t));
         ctx.globalAlpha = a * a;
         ctx.drawImage(glowSprite(p.color), p.x - s / 2, p.y - s / 2, s, s);
+      }
+    }
+
+    // 分裂型の破片
+    for (const b of this.beams) {
+      const g = Math.min(1, b.t / b.grow);
+      const fade = b.t < b.grow ? 1 : 1 - (b.t - b.grow) / (b.life - b.grow);
+      const hx = b.x1 + (b.x2 - b.x1) * g, hy = b.y1 + (b.y2 - b.y1) * g;
+      const tail = Math.max(0, g - 0.45);
+      const tx = b.x1 + (b.x2 - b.x1) * tail, ty = b.y1 + (b.y2 - b.y1) * tail;
+      ctx.globalAlpha = 0.35 * fade;
+      ctx.strokeStyle = b.color;
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      ctx.globalAlpha = fade;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      if (b.t < b.grow) {
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(glowSprite(b.color), hx - 14, hy - 14, 28, 28);
       }
     }
 

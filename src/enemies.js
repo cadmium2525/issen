@@ -8,7 +8,7 @@ import { TAU, rand, clamp, easeOutBack } from './utils.js';
 import { glowSprite } from './effects.js';
 
 const RES = 3; // スプライトの内部解像度倍率
-const cache = { normal: [null, null], bomb: [null, null], thunder: [null, null] };
+const cache = { normal: [null, null], bomb: [null, null], thunder: [null, null], splitter: [null, null], vortex: [null, null] };
 
 function mkCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -97,6 +97,88 @@ function paint(g, kind, r, hl) {
     g.arc(0, 0, r * 0.24, 0, TAU);
     g.fillStyle = '#fff6d6';
     g.fill();
+  } else if (kind === 'splitter') {
+    // 分裂型：十字に割れる手裏剣形（4枚の刃の間にすき間）
+    g.save();
+    g.shadowColor = hl ? '#ffffff' : '#6dff2a';
+    g.shadowBlur = hl ? 16 : 13;
+    const gr = g.createRadialGradient(0, 0, r * 0.1, 0, 0, r * 1.1);
+    gr.addColorStop(0, '#f2ffd6');
+    gr.addColorStop(0.5, '#9dff5c');
+    gr.addColorStop(1, '#2f7a12');
+    g.fillStyle = gr;
+    for (let i = 0; i < 4; i++) {
+      g.save();
+      g.rotate((i * Math.PI) / 2);
+      g.beginPath();
+      g.moveTo(r * 0.22, -r * 0.16);
+      g.lineTo(r * 1.15, 0);
+      g.lineTo(r * 0.22, r * 0.16);
+      g.lineTo(r * 0.12, r * 0.55);
+      g.lineTo(r * 0.55, r * 0.12);
+      g.closePath();
+      g.fill();
+      g.restore();
+    }
+    g.restore();
+    g.strokeStyle = edge || '#e2ffc4';
+    g.lineWidth = hl ? 2.2 : 1.2;
+    for (let i = 0; i < 4; i++) {
+      g.save();
+      g.rotate((i * Math.PI) / 2);
+      g.beginPath();
+      g.moveTo(r * 0.22, -r * 0.16);
+      g.lineTo(r * 1.15, 0);
+      g.lineTo(r * 0.22, r * 0.16);
+      g.stroke();
+      g.restore();
+    }
+    g.beginPath();
+    g.arc(0, 0, r * 0.26, 0, TAU);
+    g.fillStyle = '#16350a';
+    g.fill();
+    g.beginPath();
+    g.arc(0, 0, r * 0.13, 0, TAU);
+    g.fillStyle = '#ffffff';
+    g.fill();
+  } else if (kind === 'vortex') {
+    // 吸引型：渦巻きの腕を持つ球
+    g.save();
+    g.shadowColor = hl ? '#ffffff' : '#a64dff';
+    g.shadowBlur = hl ? 18 : 15;
+    const gr = g.createRadialGradient(0, 0, r * 0.05, 0, 0, r);
+    gr.addColorStop(0, '#ffffff');
+    gr.addColorStop(0.25, '#e3c2ff');
+    gr.addColorStop(0.6, '#8a3df0');
+    gr.addColorStop(1, '#2a0b5c');
+    g.beginPath();
+    g.arc(0, 0, r * 0.92, 0, TAU);
+    g.fillStyle = gr;
+    g.fill();
+    g.restore();
+    g.beginPath();
+    g.arc(0, 0, r * 0.92, 0, TAU);
+    g.lineWidth = hl ? 2.6 : 1.4;
+    g.strokeStyle = edge || '#e9d4ff';
+    g.stroke();
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(30,6,70,0.85)';
+    g.lineWidth = 2.2;
+    for (let i = 0; i < 3; i++) {
+      g.save();
+      g.rotate((i * TAU) / 3);
+      g.beginPath();
+      for (let k = 0; k <= 12; k++) {
+        const t = k / 12;
+        const a = t * 2.4;
+        const rr = r * (0.2 + 0.68 * t);
+        const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+        if (k === 0) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.stroke();
+      g.restore();
+    }
   } else {
     g.save();
     g.shadowColor = hl ? '#ffffff' : '#22c8ff';
@@ -264,6 +346,8 @@ export function updateEnemies(list, dt, px, py, time, grid) {
     if (e.kind === 'normal') {
       if (e.vx * e.vx + e.vy * e.vy > 4) e.angle = Math.atan2(e.vy, e.vx);
     } else if (e.kind === 'bomb') e.angle += dt * 1.1;
+    else if (e.kind === 'splitter') e.angle += dt * 0.9;
+    else if (e.kind === 'vortex') e.angle -= dt * 3.2;
     else e.angle = Math.sin(time * 1.6 + e.phase) * 0.22;
   }
 }

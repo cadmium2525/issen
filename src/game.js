@@ -6,7 +6,7 @@
 //    → ルートを描く → 斬撃（細い軌跡 → 閃光 → 連鎖爆破）→ ゲージ回復
 // =====================================================================
 import { CFG, ENEMY, PHASES, OPENING, OPENING_END, TIERS, RANKS, TIPS, LABELS, chainMultiplier } from './config.js';
-import { TAU, clamp, lerp, rand, randInt, pick, weighted, easeInCubic, easeOutQuad, angleLerp, fmt } from './utils.js';
+import { TAU, clamp, lerp, rand, randInt, pick, weighted, easeInCubic, easeOutQuad, angleLerp, fmt, segDist, segOut } from './utils.js';
 import { Enemy, EnemyGrid, updateEnemies, drawEnemies, drawEnemyGlows, getSprite } from './enemies.js';
 import { Effects, glowSprite, FONT_NUM, FONT_JP } from './effects.js';
 import { Route, buildCum, pointAt, routeHits } from './slash.js';
@@ -143,6 +143,7 @@ export class Game {
     this.queue = [];
     this.finale = [];
     this.labels = [];
+    this.vortices = [];
     this.fx.clear();
     this.player = {
       x: this.W / 2, y: (this.H || 800) * 0.56, vx: 0, vy: 0, angle: -Math.PI / 2,
@@ -609,7 +610,7 @@ export class Game {
 
   _updateEnding(dt) {
     if (this.mode !== 'ending') return;
-    const busy = this.queue.length > 0 || this.isSlashBusy();
+    const busy = this.queue.length > 0 || this.vortices.length > 0 || this.isSlashBusy();
     if (busy) {
       this.endWait = 0;
       return;
@@ -683,8 +684,7 @@ export class Game {
   // ------------------------------------------------------------------
   //  連鎖
   // ------------------------------------------------------------------
-  _schedule(e, delay, cause, gen, from) {
-    const act = this.act;
+  _schedule(e, delay, cause, gen, from, act = this.act) {
     if (!act || !e.alive || e.state === 'doomed') return false;
     if (cause !== 'slash' && act.events >= CFG.MAX_CHAIN_EVENTS) return false;
     e.state = 'doomed';
@@ -707,8 +707,9 @@ export class Game {
       due.sort((a, b) => a.t - b.t);
       for (const ev of due) this._kill(ev);
     }
+    this._updateVortices(dt);
     const act = this.act;
-    if (act && !act.finished && this.queue.length === 0 && this.fxTime - act.lastKill > 0.35) {
+    if (act && !act.finished && this.queue.length === 0 && this.vortices.length === 0 && this.fxTime - act.lastKill > 0.35) {
       act.finished = true;
       if (act.combo >= 2 && this.mode !== 'demo') {
         this.fx.text('+' + fmt(act.score), this.W / 2, this.comboY + 64, { size: 26, color: '#ffe36b', life: 1.1, vy: -16, tag: 'gain', replace: 'gain', pop: 1 });
@@ -780,6 +781,75 @@ export class Game {
     if (ev.gen < CFG.MAX_CHAIN_GEN) {
       if (e.kind === 'bomb') this._explode(e, ev);
       else if (e.kind === 'thunder') this._lightning(e, ev);
+      else if (e.kind === 'splitter') this._split(e, ev);
+      else if (e.kind === 'vortex') this._startVortex(e, ev);
+    }
+  }
+
+  // 分裂型：十字4方向へ破片が飛び、通り道の敵を貫く
+  _split(e, ev) {
+    const x = e.x, y = e.y, L = CFG.SPLIT_RANGE, col = ENEMY.splitter.color;
+    this.audio.split((x / this.W) * 2 - 1);
+    this.fx.flare(x, y, 70, col, 0.2, 1.5);
+    for (let k = 0; k < CFG.SPLIT_SHARDS; k++) {
+      const a = e.angle + (k * TAU) / CFG.SPLIT_SHARDS;
+      const ex = x + Math.cos(a) * L, ey = y + Math.sin(a) * L;
+      this.fx.beam(x, y, ex, ey, col, L / CFG.SPLIT_SPEED);
+      const hits = [];
+      for (const o of this.enemies) {
+        if (!o.alive || o.state !== 'alive') continue;
+        const d = segDist(x, y, ex, ey, o.x, o.y);
+        if (d <= o.r + 8) hits.push({ o, s: segOut.t * L });
+      }
+      hits.sort((p, q) => p.s - q.s);
+      for (const h of hits) this._schedule(h.o, 0.02 + h.s / CFG.SPLIT_SPEED, 'split', ev.gen + 1, null, ev.act);
+    }
+  }
+
+  // 吸引型：周囲の敵を中心へ吸い寄せ、最後に中心で圧縮爆発
+  _startVortex(e, ev) {
+    this.vortices.push({ x: e.x, y: e.y, t: 0, gen: ev.gen, act: ev.act });
+    this.audio.vortex((e.x / this.W) * 2 - 1);
+    this.fx.flare(e.x, e.y, 90, ENEMY.vortex.color, 0.3, 1.2);
+  }
+
+  _updateVortices(dt) {
+    for (let i = this.vortices.length - 1; i >= 0; i--) {
+      const v = this.vortices[i];
+      v.t += dt;
+      const R = CFG.VORTEX_RADIUS;
+      for (const o of this.enemies) {
+        if (!o.alive || o.state !== 'alive') continue;
+        const dx = v.x - o.x, dy = v.y - o.y;
+        const d = Math.hypot(dx, dy);
+        if (d > R || d < 1) continue;
+        const pull = Math.min(d - 6, (520 * (1 - d / R) + 160) * dt);
+        o.x += (dx / d) * pull;
+        o.y += (dy / d) * pull;
+        o.vx = 0;
+        o.vy = 0;
+        o.stun = Math.max(o.stun, 0.35);
+      }
+      if (Math.random() < dt * 40) {
+        const a = Math.random() * TAU, r = R * (0.5 + Math.random() * 0.5);
+        this.fx.sparks(v.x + Math.cos(a) * r, v.y + Math.sin(a) * r, 1, ENEMY.vortex.color, 260, 420, a + Math.PI + 0.5, 0.2, 1.6);
+      }
+      if (v.t >= CFG.VORTEX_TIME) {
+        this.vortices.splice(i, 1);
+        const C = CFG.VORTEX_CORE;
+        this.fx.flare(v.x, v.y, C * 3, ENEMY.vortex.color, 0.3, 1.3);
+        this.fx.flare(v.x, v.y, C * 1.4, '#ffffff', 0.12, 1.5);
+        this.fx.ring(v.x, v.y, 8, C * 1.3, 0.25, '#e3c2ff', 6);
+        this.fx.sparks(v.x, v.y, 18, '#e3c2ff', 220, 560, null, TAU, 2.4);
+        this.fx.shake(0.18);
+        this.audio.explode((v.x / this.W) * 2 - 1);
+        this._vibe(20);
+        for (const o of this.enemies) {
+          if (!o.alive || o.state !== 'alive') continue;
+          const d = Math.hypot(o.x - v.x, o.y - v.y);
+          if (d - o.r <= C) this._schedule(o, 0.02 + (d / C) * 0.06, 'vortex', v.gen + 1, null, v.act);
+        }
+      }
     }
   }
 
@@ -794,7 +864,7 @@ export class Game {
     for (const o of this.enemies) {
       if (!o.alive || o.state !== 'alive') continue;
       const d = Math.hypot(o.x - x, o.y - y);
-      if (d - o.r <= R) this._schedule(o, 0.04 + (d / R) * 0.1, 'bomb', ev.gen + 1, null);
+      if (d - o.r <= R) this._schedule(o, 0.04 + (d / R) * 0.1, 'bomb', ev.gen + 1, null, ev.act);
     }
   }
 
@@ -815,7 +885,7 @@ export class Game {
       }
       if (!best) break;
       delay += 0.07;
-      if (!this._schedule(best, delay, 'thunder', ev.gen + 1, { x: cx, y: cy })) break;
+      if (!this._schedule(best, delay, 'thunder', ev.gen + 1, { x: cx, y: cy }, ev.act)) break;
       cx = best.x;
       cy = best.y;
       hops++;
@@ -829,7 +899,7 @@ export class Game {
   _updateSpawner(dt) {
     const t = this.time;
     while (this.scriptIdx < OPENING.length && OPENING[this.scriptIdx].t <= t) {
-      this._queueGroup(OPENING[this.scriptIdx], phaseAt(t));
+      this._queueGroup(OPENING[this.scriptIdx], phaseAt(t), true); // 固定出現は上限を超えても必ず出す
       this.scriptIdx++;
     }
     if (t >= OPENING_END) {
@@ -851,37 +921,42 @@ export class Game {
     return n;
   }
 
-  _queueGroup(spec, P) {
+  _queueGroup(spec, P, scripted = false) {
     let planned = this._aliveCount();
     for (const g of this.pending) planned += g.members.length;
-    const cap = Math.min(CFG.MAX_ENEMIES, Math.round(P.cap ?? CFG.MAX_ENEMIES));
+    const cap = scripted ? CFG.MAX_ENEMIES : Math.min(CFG.MAX_ENEMIES, Math.round(P.cap ?? CFG.MAX_ENEMIES));
     const n = Math.min(spec.n, cap - planned);
     if (n < 3) return;
-    let bombs = spec.bombs ?? Math.max(0, Math.round(n * P.bomb + rand(-0.45, 0.45)));
-    let thunders = spec.thunders ?? Math.max(0, Math.round(n * P.thunder + rand(-0.45, 0.45)));
-    bombs = Math.min(bombs, n);
-    thunders = Math.min(thunders, n - bombs);
+    const count = (given, rate) => given ?? Math.max(0, Math.round(n * (rate || 0) + rand(-0.45, 0.45)));
+    let left = n;
+    const take = (c) => {
+      const v = Math.min(c, left);
+      left -= v;
+      return v;
+    };
+    const bombs = take(count(spec.bombs, P.bomb));
+    const vortexes = take(count(spec.vortexes, P.vortex));
+    const thunders = take(count(spec.thunders, P.thunder));
+    const splitters = take(count(spec.splitters, P.splitter));
 
     const f = this._formation(spec.formation, spec.side, n);
-    // 爆弾型は群れの中心寄り、雷撃型は外周寄りに配置
+    // 中心寄り：吸引型 → 爆弾型（1つおき）／外周寄り：雷撃型／分裂型は残りから均等に
     const order = f.pos.map((_, i) => i).sort((a, b) => f.d[a] - f.d[b]);
     const kinds = new Array(n).fill('normal');
-    let placed = 0;
-    for (let k = 0; placed < bombs && k < n * 2; k++) {
-      const idx = order[(k * 2) % n];
-      if (kinds[idx] === 'normal') {
-        kinds[idx] = 'bomb';
-        placed++;
+    const place = (kind, num, pickIdx) => {
+      let placed = 0;
+      for (let k = 0; placed < num && k < n * 3; k++) {
+        const idx = pickIdx(k);
+        if (kinds[idx] === 'normal') {
+          kinds[idx] = kind;
+          placed++;
+        }
       }
-    }
-    placed = 0;
-    for (let k = n - 1; placed < thunders && k >= 0; k--) {
-      const idx = order[k];
-      if (kinds[idx] === 'normal') {
-        kinds[idx] = 'thunder';
-        placed++;
-      }
-    }
+    };
+    place('vortex', vortexes, (k) => order[k % n]);
+    place('bomb', bombs, (k) => order[(k * 2 + 1) % n]);
+    place('thunder', thunders, (k) => order[n - 1 - (k % n)]);
+    place('splitter', splitters, (k) => order[(k * 3 + Math.floor(n / 3)) % n]);
     const members = f.pos.map((q, i) => ({ kind: kinds[i], x: q.x, y: q.y }));
     const tele = f.ring ? 1.0 : 0.8;
     this.pending.push({ t: tele, max: tele, members, warn: f.warn, speed: P.speed ?? 1, ring: !!f.ring, hasBomb: bombs > 0 });
@@ -979,7 +1054,7 @@ export class Game {
     if (this.demoSpawn <= 0) {
       this.demoSpawn = rand(0.9, 1.5);
       this._queueGroup(
-        { formation: weighted([['clump', 0.6], ['line', 0.2], ['v', 0.2]]), n: randInt(5, 8), bombs: randInt(1, 2), thunders: randInt(0, 1) },
+        { formation: weighted([['clump', 0.6], ['line', 0.2], ['v', 0.2]]), n: randInt(5, 8), bombs: randInt(1, 2), thunders: randInt(0, 1), splitters: Math.random() < 0.4 ? 1 : 0, vortexes: Math.random() < 0.25 ? 1 : 0 },
         { cap: 36, speed: 0.9, bomb: 0, thunder: 0 },
       );
     }
@@ -1033,7 +1108,7 @@ export class Game {
         if (d > budget || d < 30) continue;
         let dens = 0;
         for (const o of this.enemies) if (o.alive && Math.hypot(o.x - e.x, o.y - e.y) < 85) dens++;
-        const sc = (dens + (e.kind === 'bomb' ? 4 : e.kind === 'thunder' ? 2.5 : 0)) / (1 + d / 220);
+        const sc = (dens + ({ bomb: 4, thunder: 2.5, splitter: 3, vortex: 3.5 }[e.kind] || 0)) / (1 + d / 220);
         if (sc > bs) {
           bs = sc;
           best = e;
@@ -1143,6 +1218,7 @@ export class Game {
     fx.drawGhosts(ctx, (c, x, y, a, al) => this._drawPlayerShape(c, x, y, a, al, true));
     drawEnemyGlows(ctx, this.enemies, this.realTime);
     fx.drawAdditive(ctx);
+    this._drawVortices(ctx);
     this._drawDashLine(ctx);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
@@ -1340,6 +1416,39 @@ export class Game {
     ctx.globalAlpha = 1;
   }
 
+  _drawVortices(ctx) {
+    if (!this.vortices.length) return;
+    const glow = glowSprite(ENEMY.vortex.color, false);
+    ctx.lineCap = 'round';
+    for (const v of this.vortices) {
+      const k = Math.min(1, v.t / CFG.VORTEX_TIME);
+      const R = CFG.VORTEX_RADIUS * (1 - 0.55 * k);
+      ctx.globalAlpha = 0.5 + 0.4 * k;
+      ctx.drawImage(glow, v.x - R * 0.7, v.y - R * 0.7, R * 1.4, R * 1.4);
+      ctx.strokeStyle = '#c77dff';
+      for (let arm = 0; arm < 4; arm++) {
+        ctx.globalAlpha = 0.75;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let i = 0; i <= 16; i++) {
+          const t = i / 16;
+          const a = arm * (TAU / 4) - this.realTime * 9 + t * 3.2;
+          const rr = R * (1 - t * 0.9);
+          const x = v.x + Math.cos(a) * rr, y = v.y + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.35 * (1 - k);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(v.x, v.y, R, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   _drawDashLine(ctx) {
     const s = this.slash;
     if (s.phase !== 'dash' && s.phase !== 'hold') return;
@@ -1400,10 +1509,22 @@ export class Game {
       ctx.lineWidth = 1.5;
       for (const e of hitSet) {
         if (e.kind === 'normal') continue;
-        const R = e.kind === 'bomb' ? CFG.BOMB_RADIUS : CFG.THUNDER_RANGE;
-        ctx.strokeStyle = e.kind === 'bomb' ? 'rgba(255,164,36,0.75)' : 'rgba(67,217,255,0.45)';
         ctx.beginPath();
-        ctx.arc(e.x, e.y, R, 0, TAU);
+        if (e.kind === 'splitter') {
+          // 破片の飛ぶ十字方向
+          ctx.strokeStyle = 'rgba(157,255,92,0.7)';
+          for (let k = 0; k < CFG.SPLIT_SHARDS; k++) {
+            const a = e.angle + (k * TAU) / CFG.SPLIT_SHARDS;
+            ctx.moveTo(e.x + Math.cos(a) * e.r, e.y + Math.sin(a) * e.r);
+            ctx.lineTo(e.x + Math.cos(a) * CFG.SPLIT_RANGE, e.y + Math.sin(a) * CFG.SPLIT_RANGE);
+          }
+        } else if (e.kind === 'vortex') {
+          ctx.strokeStyle = 'rgba(199,125,255,0.65)';
+          ctx.arc(e.x, e.y, CFG.VORTEX_RADIUS, 0, TAU);
+        } else {
+          ctx.strokeStyle = e.kind === 'bomb' ? 'rgba(255,164,36,0.75)' : 'rgba(67,217,255,0.45)';
+          ctx.arc(e.x, e.y, e.kind === 'bomb' ? CFG.BOMB_RADIUS : CFG.THUNDER_RANGE, 0, TAU);
+        }
         ctx.stroke();
       }
       ctx.setLineDash([]);

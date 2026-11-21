@@ -41,17 +41,25 @@ export const CFG = {
   BOMB_RADIUS: 90,         // 爆弾型の爆風半径
   THUNDER_RANGE: 180,      // 雷撃型の伝播距離
   THUNDER_JUMPS: 4,        // 雷撃型の伝播回数
+  SPLIT_SHARDS: 4,         // 分裂型の破片の数（十字方向）
+  SPLIT_RANGE: 150,        // 破片の飛距離
+  SPLIT_SPEED: 650,        // 破片の速さ
+  VORTEX_RADIUS: 170,      // 吸引型が吸い寄せる半径
+  VORTEX_CORE: 62,         // 吸い寄せた後、中心で圧縮爆発する半径
+  VORTEX_TIME: 0.45,       // 吸い寄せる時間
 
   // --- 描画 ---
   MAX_PARTICLES: 700,
   DPR_MAX: 2,              // Canvas内部解像度の上限
 };
 
-// 敵の種類（MVP：3種）
+// 敵の種類（MVPの3種 ＋ 拡張の分裂型・吸引型）
 export const ENEMY = {
-  normal:  { r: 11, speed: 68, score: 10, color: '#ff3b6b', name: '通常型' },
-  bomb:    { r: 14, speed: 50, score: 20, color: '#ffa424', name: '爆弾型' },
-  thunder: { r: 13, speed: 60, score: 20, color: '#43d9ff', name: '雷撃型' },
+  normal:   { r: 11, speed: 68, score: 10, color: '#ff3b6b', name: '通常型' },
+  bomb:     { r: 14, speed: 50, score: 20, color: '#ffa424', name: '爆弾型' },
+  thunder:  { r: 13, speed: 60, score: 20, color: '#43d9ff', name: '雷撃型' },
+  splitter: { r: 13, speed: 62, score: 20, color: '#9dff5c', name: '分裂型' },
+  vortex:   { r: 15, speed: 42, score: 30, color: '#c77dff', name: '吸引型' },
 };
 
 // 連鎖倍率：1 + min(連鎖数 ÷ 10, 4)
@@ -59,13 +67,14 @@ export const chainMultiplier = (combo) => 1 + Math.min(combo / 10, 4);
 
 // 時間ごとの出現テーブル（間は線形補間。40秒＝残り20秒でラッシュに切り替え）
 export const PHASES = [
-  { t: 0,     interval: 2.4,  min: 5, max: 7,  bomb: 0.12, thunder: 0.0,  speed: 1.0,  cap: 26 },
-  { t: 10,    interval: 2.0,  min: 6, max: 9,  bomb: 0.15, thunder: 0.10, speed: 1.08, cap: 40 },
-  { t: 30,    interval: 1.55, min: 7, max: 11, bomb: 0.17, thunder: 0.12, speed: 1.22, cap: 60 },
-  { t: 39.99, interval: 1.4,  min: 7, max: 11, bomb: 0.18, thunder: 0.13, speed: 1.27, cap: 64 },
-  { t: 40,    interval: 0.6,  min: 11, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.3,  cap: 120 },
-  { t: 60,    interval: 0.5,  min: 12, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.5,  cap: 120 },
-  { t: 999,   interval: 0.5,  min: 12, max: 16, bomb: 0.19, thunder: 0.14, speed: 1.55, cap: 120 },
+  { t: 0,     interval: 2.4,  min: 5, max: 7,  bomb: 0.12, thunder: 0.0,  splitter: 0.0,  vortex: 0.0,  speed: 1.0,  cap: 26 },
+  { t: 10,    interval: 2.0,  min: 6, max: 9,  bomb: 0.15, thunder: 0.10, splitter: 0.0,  vortex: 0.0,  speed: 1.08, cap: 40 },
+  { t: 18,    interval: 1.85, min: 6, max: 10, bomb: 0.15, thunder: 0.10, splitter: 0.06, vortex: 0.0,  speed: 1.13, cap: 48 },
+  { t: 30,    interval: 1.55, min: 7, max: 11, bomb: 0.16, thunder: 0.11, splitter: 0.08, vortex: 0.05, speed: 1.22, cap: 60 },
+  { t: 39.99, interval: 1.4,  min: 7, max: 11, bomb: 0.17, thunder: 0.12, splitter: 0.08, vortex: 0.05, speed: 1.27, cap: 64 },
+  { t: 40,    interval: 0.6,  min: 11, max: 16, bomb: 0.18, thunder: 0.12, splitter: 0.09, vortex: 0.06, speed: 1.3,  cap: 120 },
+  { t: 60,    interval: 0.5,  min: 12, max: 16, bomb: 0.18, thunder: 0.12, splitter: 0.09, vortex: 0.06, speed: 1.5,  cap: 120 },
+  { t: 999,   interval: 0.5,  min: 12, max: 16, bomb: 0.18, thunder: 0.12, splitter: 0.09, vortex: 0.06, speed: 1.55, cap: 120 },
 ];
 
 // 序盤の固定出現（0〜10秒：操作を即理解させる）
@@ -75,17 +84,21 @@ export const OPENING = [
   { t: 4.8, formation: 'line',  side: 'bottom', n: 6, bombs: 1, thunders: 0 },
   { t: 7.2, formation: 'clump', side: 'right',  n: 9, bombs: 2, thunders: 0 },
   { t: 9.6, formation: 'clump', side: 'top',    n: 9, bombs: 1, thunders: 2 }, // 最初の雷撃型
+  { t: 17,  formation: 'clump', side: 'left',   n: 10, bombs: 1, thunders: 1, splitters: 1 }, // 最初の分裂型
+  { t: 25,  formation: 'clump', side: 'top',    n: 11, bombs: 2, thunders: 1, vortexes: 1 },  // 最初の吸引型
   // RUSH開始：3方向から大群を一気に投入し、百連鎖を狙える密度を作る
-  { t: 40.0, formation: 'clump', side: 'top',   n: 18, bombs: 4, thunders: 2 },
-  { t: 40.4, formation: 'clump', side: 'left',  n: 16, bombs: 3, thunders: 2 },
-  { t: 40.8, formation: 'clump', side: 'right', n: 16, bombs: 3, thunders: 2 },
+  { t: 40.0, formation: 'clump', side: 'top',   n: 18, bombs: 4, thunders: 2, splitters: 1, vortexes: 1 },
+  { t: 40.4, formation: 'clump', side: 'left',  n: 16, bombs: 3, thunders: 2, splitters: 1, vortexes: 0 },
+  { t: 40.8, formation: 'clump', side: 'right', n: 16, bombs: 3, thunders: 2, splitters: 1, vortexes: 1 },
 ];
 export const OPENING_END = 10.5;
 
 // 特殊敵の初登場時に敵の頭上へ出す説明ラベル
 export const LABELS = {
-  bomb:    { title: '爆弾型', sub: '倒すと周囲を爆破！',       color: '#ffa424' },
-  thunder: { title: '雷撃型', sub: '倒すと近くへ電撃が連鎖！', color: '#43d9ff' },
+  bomb:     { title: '爆弾型', sub: '倒すと周囲を爆破！',         color: '#ffa424' },
+  thunder:  { title: '雷撃型', sub: '倒すと近くへ電撃が連鎖！',   color: '#43d9ff' },
+  splitter: { title: '分裂型', sub: '倒すと十字に破片が飛ぶ！',   color: '#9dff5c' },
+  vortex:   { title: '吸引型', sub: '倒すと周りを吸い寄せて爆発！', color: '#c77dff' },
 };
 
 // 連鎖数の節目で出る称号
@@ -117,4 +130,6 @@ export const TIPS = [
   '斬撃のダッシュ中は無敵。囲まれたら斬り抜けろ。',
   '連鎖10ごとに得点倍率アップ（最大×5）。',
   '斬ボタンを押したまま引っぱっても斬撃ルートを描ける。',
+  '吸引型で散らばった敵を集め、そこに爆弾型が入れば大連鎖。',
+  '分裂型の破片は十字に飛ぶ。向きは時間停止中に点線で見える。',
 ];

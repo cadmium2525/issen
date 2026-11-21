@@ -46,7 +46,7 @@ export class UI {
     };
     this._c = {};
     this._countRaf = 0;
-    document.querySelectorAll('canvas[data-kind]').forEach((cv) => drawSpriteInto(cv, cv.dataset.kind, 40));
+    document.querySelectorAll('canvas[data-kind]').forEach((cv) => drawSpriteInto(cv, cv.dataset.kind, 34));
     this.syncSettings();
     this.syncBest();
   }
