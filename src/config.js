@@ -43,13 +43,13 @@ export const CFG = {
   THUNDER_JUMPS: 4,        // 雷撃型の伝播回数
   SPLIT_SHARDS: 4,         // 分裂型の破片の数（十字方向）
   SPLIT_RANGE: 150,        // 破片の飛距離
-  SPLIT_SPEED: 650,        // 破片の速さ
+  SPLIT_SPEED: 520,        // 破片の速さ
   VORTEX_RADIUS: 170,      // 吸引型が吸い寄せる半径
   VORTEX_CORE: 62,         // 吸い寄せた後、中心で圧縮爆発する半径
   VORTEX_TIME: 0.45,       // 吸い寄せる時間
 
   // --- 描画 ---
-  MAX_PARTICLES: 700,
+  MAX_PARTICLES: 1100,     // 粒子の上限（混雑時は小さい火花から間引く）
   DPR_MAX: 2,              // Canvas内部解像度の上限
 };
 

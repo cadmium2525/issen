@@ -44,11 +44,16 @@ function layout() {
   ui.setRotate(landscapeMobile);
   if (landscapeMobile && game.mode === 'play') game.setPaused(true);
   const w = Math.min(vw, Math.round((vh * 9) / 16));
+  // 大きさが変わらないイベント（スクロール等で来る visualViewport の resize）では何もしない
+  if (w === lastW && vh === lastH) return;
+  lastW = w;
+  lastH = vh;
   app.style.width = w + 'px';
   app.style.height = vh + 'px';
   game.resize(w, vh, dpr, readSafe());
   input.reset(); // 画面回転・リサイズ時は入力状態を初期化
 }
+let lastW = 0, lastH = 0;
 
 let layoutQueued = false;
 function queueLayout() {

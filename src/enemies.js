@@ -246,8 +246,9 @@ export class Enemy {
     this.cutAngle = 0;
     this.cutOrder = 0;
   }
+  // 出現直後・吸い寄せ中・はじき飛ばされ中は当たらない
   get harmful() {
-    return this.state === 'alive' && this.spawnT > 0.35;
+    return this.state === 'alive' && this.spawnT > 0.35 && this.stun <= 0;
   }
 }
 

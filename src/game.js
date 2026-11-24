@@ -6,7 +6,7 @@
 //    → ルートを描く → 斬撃（細い軌跡 → 閃光 → 連鎖爆破）→ ゲージ回復
 // =====================================================================
 import { CFG, ENEMY, PHASES, OPENING, OPENING_END, TIERS, RANKS, TIPS, LABELS, chainMultiplier } from './config.js';
-import { TAU, clamp, lerp, rand, randInt, pick, weighted, easeInCubic, easeOutQuad, angleLerp, fmt, segDist, segOut } from './utils.js';
+import { TAU, clamp, lerp, rand, randInt, pick, weighted, easeInCubic, easeOutQuad, easeOutBack, angleLerp, fmt, segDist, segOut } from './utils.js';
 import { Enemy, EnemyGrid, updateEnemies, drawEnemies, drawEnemyGlows, getSprite } from './enemies.js';
 import { Effects, glowSprite, FONT_NUM, FONT_JP } from './effects.js';
 import { Route, buildCum, pointAt, routeHits } from './slash.js';
@@ -132,6 +132,25 @@ export class Game {
     g.fillStyle = gr;
     g.fillRect(0, 0, bw, bh);
     this.hurtLayer = hv;
+    this.heatLayers = new Map();
+  }
+
+  // 大連鎖中に画面の縁を光らせる層（色ごとにキャッシュ）
+  _heatLayer(color) {
+    let c = this.heatLayers.get(color);
+    if (c) return c;
+    c = document.createElement('canvas');
+    c.width = this.vignette.width;
+    c.height = this.vignette.height;
+    const g = c.getContext('2d');
+    const bw = c.width, bh = c.height;
+    const gr = g.createRadialGradient(bw / 2, bh / 2, bh * 0.25, bw / 2, bh / 2, bh * 0.62);
+    gr.addColorStop(0, 'rgba(0,0,0,0)');
+    gr.addColorStop(1, color);
+    g.fillStyle = gr;
+    g.fillRect(0, 0, bw, bh);
+    this.heatLayers.set(color, c);
+    return c;
   }
 
   // ------------------------------------------------------------------
@@ -144,6 +163,8 @@ export class Game {
     this.finale = [];
     this.labels = [];
     this.vortices = [];
+    this.flyers = [];
+    this.unbanked = 0;
     this.fx.clear();
     this.player = {
       x: this.W / 2, y: (this.H || 800) * 0.56, vx: 0, vy: 0, angle: -Math.PI / 2,
@@ -220,6 +241,12 @@ export class Game {
     if (v && this.mode !== 'play') return;
     this.paused = v;
     this.input?.reset();
+    // 描きかけのルートは指が離れて続きが描けなくなるので、再開後に描き直せるよう消す
+    if (v && this.slash.phase === 'aim' && this.slash.route) {
+      this.slash.route = null;
+      this.slash.hits = [];
+      this.slash.hitSet = null;
+    }
     if (v) {
       this.audio.suspend();
       this.ui.showPause();
@@ -389,7 +416,15 @@ export class Game {
     this.audio.timeStopOut();
     this._vibe(n ? 30 : 10);
     if (n >= 3 && this.mode !== 'demo') this.fx.stamp('斬');
-    const step = n > 1 ? Math.min(0.024, 0.32 / n) : 0;
+    const step = n > 1 ? Math.min(0.03, 0.42 / n) : 0;
+    // 各区間の線を画面の端から端まで伸ばした「一閃」
+    for (let i = 0; i < s.pts.length - 1; i++) {
+      const a = s.pts[i], b = s.pts[i + 1];
+      const L = Math.hypot(b.x - a.x, b.y - a.y);
+      if (L < 1) continue;
+      const ux = (b.x - a.x) / L, uy = (b.y - a.y) / L, E = 1200;
+      this.fx.streak(a.x - ux * E, a.y - uy * E, b.x + ux * E, b.y + uy * E);
+    }
     cut.forEach((e, i) => this._schedule(e, 0.012 + i * step, 'slash', 0, null));
     const end = s.pts[s.pts.length - 1];
     this.fx.flare(end.x, end.y, 100, '#6ff3ff', 0.28, 1.4);
@@ -610,7 +645,7 @@ export class Game {
 
   _updateEnding(dt) {
     if (this.mode !== 'ending') return;
-    const busy = this.queue.length > 0 || this.vortices.length > 0 || this.isSlashBusy();
+    const busy = this.queue.length > 0 || this.vortices.length > 0 || this.flyers.length > 0 || this.isSlashBusy();
     if (busy) {
       this.endWait = 0;
       return;
@@ -711,8 +746,11 @@ export class Game {
     const act = this.act;
     if (act && !act.finished && this.queue.length === 0 && this.vortices.length === 0 && this.fxTime - act.lastKill > 0.35) {
       act.finished = true;
-      if (act.combo >= 2 && this.mode !== 'demo') {
-        this.fx.text('+' + fmt(act.score), this.W / 2, this.comboY + 64, { size: 26, color: '#ffe36b', life: 1.1, vy: -16, tag: 'gain', replace: 'gain', pop: 1 });
+      if (act.combo >= 2 && this.mode !== 'demo' && act.score > 0) {
+        // 得点がスコア表示へ飛んでいき、着地した瞬間にスコアへ加算される
+        this.flyers.push({ value: act.score, combo: act.combo, t: 0 });
+      } else {
+        this.unbanked = Math.max(0, this.unbanked - act.score);
       }
     }
     const c = this.comboView;
@@ -737,6 +775,7 @@ export class Game {
       const pts = Math.round(T.score * chainMultiplier(act.combo));
       this.score += pts;
       act.score += pts;
+      this.unbanked += pts;
       this.kills++;
       if (act.combo > this.maxChain) this.maxChain = act.combo;
       // 連鎖でゲージ追加回復（1回の斬撃につき上限あり）
@@ -773,6 +812,8 @@ export class Game {
         this.audio.tier(act.tierIdx);
         this.fx.flash(0.12, tier.color);
         this.fx.shake(0.15);
+        this.fx.ring(e.x, e.y, 10, 170, 0.4, tier.color, 6);
+        this.hitstop = Math.max(this.hitstop, 0.045); // 節目で一瞬止めて重みを出す
         this._vibe(25);
       }
     }
@@ -864,7 +905,7 @@ export class Game {
     for (const o of this.enemies) {
       if (!o.alive || o.state !== 'alive') continue;
       const d = Math.hypot(o.x - x, o.y - y);
-      if (d - o.r <= R) this._schedule(o, 0.04 + (d / R) * 0.1, 'bomb', ev.gen + 1, null, ev.act);
+      if (d - o.r <= R) this._schedule(o, 0.06 + (d / R) * 0.14, 'bomb', ev.gen + 1, null, ev.act);
     }
   }
 
@@ -884,7 +925,7 @@ export class Game {
         }
       }
       if (!best) break;
-      delay += 0.07;
+      delay += 0.085;
       if (!this._schedule(best, delay, 'thunder', ev.gen + 1, { x: cx, y: cy }, ev.act)) break;
       cx = best.x;
       cy = best.y;
@@ -1164,10 +1205,72 @@ export class Game {
     if (this.enemies.some((e) => e.alive && Math.hypot(e.x - p.x, e.y - p.y) < 270)) this.ui.showHint('slash');
   }
 
+  _updateFlyers(dt) {
+    for (let i = this.flyers.length - 1; i >= 0; i--) {
+      const f = this.flyers[i];
+      f.t += dt;
+      if (f.t >= 0.68) {
+        this.flyers.splice(i, 1);
+        this.unbanked = Math.max(0, this.unbanked - f.value);
+        this.ui.bumpScore(f.combo);
+        this.audio.bank(f.combo);
+        this._vibe(f.combo >= 40 ? 40 : 15);
+      }
+    }
+  }
+
+  _drawFlyers(ctx) {
+    if (!this.flyers.length) return;
+    const x0 = this.W / 2, y0 = this.comboY + 64;
+    const y1 = (this.safe.top + 34) / this.scale;
+    for (const f of this.flyers) {
+      const big = Math.min(1.5, 1 + f.combo / 120);
+      let x = x0, y = y0, sc, a = 1;
+      if (f.t < 0.28) {
+        sc = easeOutBack(Math.min(1, f.t / 0.2)) * big;
+      } else {
+        const k = easeInCubic((f.t - 0.28) / 0.4);
+        y = y0 + (y1 - y0) * k;
+        sc = big * (1 - 0.45 * k);
+        a = 1 - 0.3 * k;
+      }
+      const str = '+' + fmt(f.value);
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `italic 900 28px ${FONT_NUM}`;
+      if (f.t >= 0.28) {
+        // 尾を引く残像
+        for (let g = 1; g <= 3; g++) {
+          ctx.globalAlpha = 0.18 * a / g;
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          const k = this.dpr * this.scale;
+          ctx.setTransform(k * sc, 0, 0, k * sc, k * x, k * (y + g * 14));
+          ctx.fillStyle = '#ffe36b';
+          ctx.fillText(str, 0, 0);
+        }
+      }
+      const k = this.dpr * this.scale;
+      ctx.setTransform(k * sc, 0, 0, k * sc, k * x, k * y);
+      ctx.globalAlpha = a;
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(4,4,14,0.9)';
+      ctx.strokeText(str, 0, 0);
+      ctx.shadowColor = '#ffb347';
+      ctx.shadowBlur = 16;
+      ctx.fillStyle = '#ffe36b';
+      ctx.fillText(str, 0, 0);
+      ctx.restore();
+    }
+  }
+
   _updateHUD(dt) {
     if (this.mode !== 'play' && this.mode !== 'ending') return;
-    this.scoreShown += (this.score - this.scoreShown) * Math.min(1, dt * 12);
-    if (Math.abs(this.score - this.scoreShown) < 1) this.scoreShown = this.score;
+    this._updateFlyers(dt);
+    const banked = this.score - this.unbanked;
+    this.scoreShown += (banked - this.scoreShown) * Math.min(1, dt * 9);
+    if (Math.abs(banked - this.scoreShown) < 1) this.scoreShown = banked;
     const s = this.slash;
     this.ui.updateHUD({
       time: Math.max(0, CFG.RUN_TIME - this.time),
@@ -1229,11 +1332,22 @@ export class Game {
 
     // 画面座標
     this._drawCombo(ctx);
+    this._drawFlyers(ctx);
     fx.drawTexts(ctx, W, H);
     this._drawJoystick(ctx);
     if (this.slashBlend > 0.01) this._drawAimHud(ctx);
     ctx.globalAlpha = 1;
     ctx.drawImage(this.vignette, 0, 0, W, H);
+    // 大連鎖中は画面の縁が称号の色で光る
+    const cv = this.comboView;
+    if (cv && cv.n >= 20) {
+      const fade = cv.t < 1.2 ? 1 : Math.max(0, 1 - (cv.t - 1.2) / 0.4);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = Math.min(0.7, 0.15 + (cv.n - 20) / 110) * fade * (0.85 + 0.15 * Math.sin(this.realTime * 12));
+      ctx.drawImage(this._heatLayer(cv.n >= 100 ? '#ffffff' : tierColor(cv.n)), 0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
     if (this.hurtA > 0.01) {
       ctx.globalAlpha = this.hurtA;
       ctx.drawImage(this.hurtLayer, 0, 0, W, H);

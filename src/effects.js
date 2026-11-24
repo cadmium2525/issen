@@ -97,6 +97,7 @@ export class Effects {
     this.rings = [];
     this.bolts = [];
     this.beams = [];
+    this.streaks = [];
     this.trails = [];
     this.ghosts = [];
     this.pieces = [];
@@ -112,8 +113,9 @@ export class Effects {
   }
 
   // ---------------- 生成 ----------------
-  _add(kind, x, y, vx, vy, life, size, color, drag = 3) {
-    if (this.parts.length >= CFG.MAX_PARTICLES) return null;
+  // priority = true（大きな発光）は上限を少し超えても出す。見せ場で光が欠けないように
+  _add(kind, x, y, vx, vy, life, size, color, drag = 3, priority = false) {
+    if (this.parts.length >= CFG.MAX_PARTICLES + (priority ? 250 : 0)) return null;
     const p = this.pool.pop() || {};
     p.kind = kind; p.x = x; p.y = y; p.vx = vx; p.vy = vy;
     p.life = life; p.max = life; p.size = size; p.color = color; p.drag = drag;
@@ -122,7 +124,15 @@ export class Effects {
     return p;
   }
 
+  // 混雑度に応じて細かい粒子の数を減らす（重さと見た目の両立）
+  _lod(n) {
+    const c = this.parts.length;
+    if (c < 600) return n;
+    return Math.ceil(n * (c < 900 ? 0.5 : 0.3));
+  }
+
   sparks(x, y, n, color, smin, smax, dir = null, spread = TAU, width = 2, life = [0.16, 0.38]) {
+    n = this._lod(n);
     for (let i = 0; i < n; i++) {
       const a = dir === null ? rand(0, TAU) : dir + rand(-spread / 2, spread / 2);
       const s = rand(smin, smax);
@@ -131,6 +141,7 @@ export class Effects {
   }
 
   embers(x, y, n, color, smin, smax, size = 6) {
+    n = this._lod(n);
     for (let i = 0; i < n; i++) {
       const a = rand(0, TAU), s = rand(smin, smax);
       this._add('ember', x, y, Math.cos(a) * s, Math.sin(a) * s, rand(0.35, 0.8), size * rand(0.6, 1.3), color, 2.2);
@@ -138,6 +149,7 @@ export class Effects {
   }
 
   shards(x, y, n, color, smin = 90, smax = 260) {
+    n = this._lod(n);
     for (let i = 0; i < n; i++) {
       const a = rand(0, TAU), s = rand(smin, smax);
       this._add('shard', x, y, Math.cos(a) * s, Math.sin(a) * s, rand(0.3, 0.6), rand(3, 6.5), color, 3);
@@ -145,7 +157,7 @@ export class Effects {
   }
 
   flare(x, y, size, color, life = 0.22, grow = 1.5) {
-    const p = this._add('flare', x, y, 0, 0, life, size, color, 0);
+    const p = this._add('flare', x, y, 0, 0, life, size, color, 0, true);
     if (p) p.grow = grow;
   }
 
@@ -179,6 +191,11 @@ export class Effects {
   // 分裂型の破片：始点から終点へ伸びる光線
   beam(x1, y1, x2, y2, color, grow = 0.2) {
     this.beams.push({ x1, y1, x2, y2, color, grow, t: 0, life: grow + 0.22 });
+  }
+
+  // 閃光の瞬間、斬撃の線が画面の端から端まで走る
+  streak(x1, y1, x2, y2) {
+    this.streaks.push({ x1, y1, x2, y2, life: 0.32, max: 0.32 });
   }
 
   slashTrail(pts) {
@@ -298,6 +315,10 @@ export class Effects {
       b.t += d;
       if (b.t >= b.life) this.beams.splice(i, 1);
     }
+    for (let i = this.streaks.length - 1; i >= 0; i--) {
+      this.streaks[i].life -= dt;
+      if (this.streaks[i].life <= 0) this.streaks.splice(i, 1);
+    }
     for (let i = this.trails.length - 1; i >= 0; i--) {
       this.trails[i].life -= dt; // 斬撃の閃光は実時間で消える
       if (this.trails[i].life <= 0) this.trails.splice(i, 1);
@@ -374,6 +395,18 @@ export class Effects {
   drawAdditive(ctx) {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+
+    // 画面を横切る一閃
+    for (const s of this.streaks) {
+      const a = s.life / s.max;
+      ctx.globalAlpha = 0.5 * a * a;
+      ctx.strokeStyle = '#bff9ff';
+      ctx.lineWidth = 1 + 5 * a;
+      ctx.beginPath();
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x2, s.y2);
+      ctx.stroke();
+    }
 
     // 斬撃の閃光
     for (const t of this.trails) {

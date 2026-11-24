@@ -198,6 +198,14 @@ export class UI {
     }
   }
 
+  // 連鎖の得点が着地した瞬間、スコア表示を弾ませる
+  bumpScore(combo) {
+    const el = this.el.score;
+    el.classList.remove('bump', 'bump-big');
+    void el.offsetWidth;
+    el.classList.add(combo >= 40 ? 'bump-big' : 'bump');
+  }
+
   nudgeSlash() {
     const b = this.el.slash;
     b.classList.remove('nudge');

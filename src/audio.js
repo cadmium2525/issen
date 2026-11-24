@@ -297,9 +297,24 @@ export class AudioEngine {
     this._noise(t, 0.42, 0.22, out, 'bandpass', 300, 3000, 2, 0.08);
   }
 
+  // 連鎖の得点がスコアに入る瞬間：低音の一撃＋上昇アルペジオ（大きいほど豪華）
+  bank(combo) {
+    if (!this._gate('bank', 0.12)) return;
+    const t = this.ctx.currentTime;
+    const big = Math.min(1, 0.35 + combo / 80);
+    this._tone('sine', 90, 45, t, 0.35, 0.55 * big, this.sfx, 0.004);
+    this._noise(t, 0.12, 0.18 * big, this.sfx, 'highpass', 6000, 9000, 0.7, 0.002);
+    const steps = combo >= 50 ? [0, 4, 7, 12, 16] : combo >= 20 ? [0, 4, 7, 12] : [0, 7];
+    steps.forEach((s, i) => {
+      const f = mtof(76 + s);
+      this._tone('triangle', f, f, t + i * 0.045, 0.22, 0.11, this.sfx, 0.003);
+      this._tone('sine', f * 2, f * 2, t + i * 0.045, 0.25, 0.04, this.delaySend, 0.003);
+    });
+  }
+
   // 連鎖数に応じて音程が上がる
   blip(combo, pan) {
-    if (!this._gate('blip', 0.026)) return;
+    if (!this._gate('blip', 0.014)) return;
     let i = Math.max(0, combo - 1);
     if (i >= 15) i = 5 + ((i - 5) % 10);
     const semis = PENTA[i % 5] + 12 * Math.floor(i / 5);

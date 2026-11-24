@@ -118,6 +118,8 @@ button {
   animation: tpulse 0.5s ease-in-out infinite alternate;
 }
 .hud-score { text-align: center; }
+.hud-score .hud-num.bump { animation: scorebump 0.35s ease-out; }
+.hud-score .hud-num.bump-big { animation: scorebump-big 0.5s ease-out; }
 .hud-sub {
   display: block;
   margin-top: 4px;
@@ -555,6 +557,12 @@ button {
 @keyframes hpbreak {
   0% { transform: skewX(-24deg) scale(1.8); background: #fff; box-shadow: 0 0 20px #ff5f7e; }
   100% { transform: skewX(-24deg) scale(1); }
+}
+@keyframes scorebump { 0% { transform: scale(1.35); color: var(--gold); } 100% { transform: scale(1); } }
+@keyframes scorebump-big {
+  0% { transform: scale(1.7); color: #fff; text-shadow: 0 0 24px var(--gold), 0 0 48px var(--gold); }
+  40% { transform: scale(1.15); color: var(--gold); }
+  100% { transform: scale(1); }
 }
 @keyframes breathe { 50% { transform: scale(1.05); } }
 @keyframes nudge {
