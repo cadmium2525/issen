@@ -749,6 +749,9 @@ export class Game {
       if (act.combo >= 2 && this.mode !== 'demo' && act.score > 0) {
         // 得点がスコア表示へ飛んでいき、着地した瞬間にスコアへ加算される
         this.flyers.push({ value: act.score, combo: act.combo, t: 0 });
+        // 連鎖数の表示と称号を消し、数字が得点に「換金」されて飛んでいくように見せる
+        this.comboView = null;
+        this.fx.texts = this.fx.texts.filter((t) => t.tag !== 'tier');
       } else {
         this.unbanked = Math.max(0, this.unbanked - act.score);
       }
@@ -1221,7 +1224,7 @@ export class Game {
 
   _drawFlyers(ctx) {
     if (!this.flyers.length) return;
-    const x0 = this.W / 2, y0 = this.comboY + 64;
+    const x0 = this.W / 2, y0 = this.comboY - 22;
     const y1 = (this.safe.top + 34) / this.scale;
     for (const f of this.flyers) {
       const big = Math.min(1.5, 1 + f.combo / 120);
