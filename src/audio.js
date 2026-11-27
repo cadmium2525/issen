@@ -297,6 +297,29 @@ export class AudioEngine {
     this._noise(t, 0.42, 0.22, out, 'bandpass', 300, 3000, 2, 0.08);
   }
 
+  // かすり：鋭い「チッ」。続けてかすると音程が上がる
+  graze(streak, pan) {
+    if (!this._gate('graze', 0.03)) return;
+    const t = this.ctx.currentTime;
+    const out = this._out(pan);
+    const f = 1800 * Math.pow(2, Math.min(streak - 1, 12) / 12);
+    this._noise(t, 0.035, 0.28, out, 'highpass', 6000, 9000, 0.8, 0.001);
+    this._tone('sine', f, f * 1.25, t, 0.07, 0.07, out, 0.001);
+  }
+
+  // 一掃：重い一撃＋きらびやかな上昇和音
+  perfect() {
+    if (!this._gate('perfect', 0.5)) return;
+    const t = this.ctx.currentTime;
+    this._tone('sine', 150, 32, t, 0.7, 0.8, this.sfx, 0.004);
+    this._noise(t, 0.6, 0.35, this.sfx, 'lowpass', 6000, 300, 0.7, 0.003);
+    [69, 73, 76, 81, 85, 88].forEach((m, i) => {
+      this._tone('sawtooth', mtof(m), mtof(m), t + 0.05 + i * 0.05, 0.5, 0.045, this.sfx, 0.005, i % 2 ? 6 : -6);
+      this._tone('sine', mtof(m + 12), mtof(m + 12), t + 0.05 + i * 0.05, 0.7, 0.05, this.delaySend, 0.004);
+    });
+    this._noise(t + 0.1, 0.9, 0.08, this.sfx, 'highpass', 9000, 12000, 0.5, 0.05);
+  }
+
   // 連鎖の得点がスコアに入る瞬間：低音の一撃＋上昇アルペジオ（大きいほど豪華）
   bank(combo) {
     if (!this._gate('bank', 0.12)) return;

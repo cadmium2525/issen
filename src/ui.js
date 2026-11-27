@@ -198,6 +198,14 @@ export class UI {
     }
   }
 
+  // かすりでゲージが回復した瞬間、斬ボタンのリングを光らせる
+  grazePulse() {
+    const b = this.el.slash;
+    b.classList.remove('graze');
+    void b.offsetWidth;
+    b.classList.add('graze');
+  }
+
   // 連鎖の得点が着地した瞬間、スコア表示を弾ませる
   bumpScore(combo) {
     const el = this.el.score;
@@ -250,6 +258,7 @@ export class UI {
     $('res-best').textContent = fmt(d.best);
     $('res-goal').textContent = d.goal ? `次の目標：${d.goal} 連鎖` : '百連鎖達成！ あとは自己ベスト更新だ';
     $('res-tip').textContent = 'TIP  ' + d.tip;
+    $('res-extra').textContent = `かすり ${d.grazes}回　・　一掃 ${d.perfects}回`;
     const nb = $('res-newbest');
     nb.classList.add('hidden');
     const dbg = $('res-debug');

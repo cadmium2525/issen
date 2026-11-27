@@ -7,7 +7,7 @@ const DEFAULTS = {
   plays: 0,
   sound: true,
   vibe: true,
-  tut: { move: false, slash: false, bomb: false, thunder: false, splitter: false, vortex: false },
+  tut: { move: false, slash: false, bomb: false, thunder: false, splitter: false, vortex: false, graze: false },
 };
 
 function load() {

@@ -48,6 +48,17 @@ export const CFG = {
   VORTEX_CORE: 62,         // 吸い寄せた後、中心で圧縮爆発する半径
   VORTEX_TIME: 0.45,       // 吸い寄せる時間
 
+  // --- かすり（グレイズ）：敵をギリギリでかすめるとゲージが回復する ---
+  GRAZE_MARGIN: 16,        // 当たらない範囲で、敵の縁からこの距離以内をかすめると「かすり」
+  GRAZE_GAIN: 0.03,        // かすり1回のゲージ回復量
+  GRAZE_COOLDOWN: 1.2,     // 同じ敵からは1.2秒に1回まで
+  GRAZE_CAP: 0.4,          // 斬撃1回ぶんのゲージのうち、かすりで回復できる上限
+  GRAZE_SCORE: 10,         // かすり1回の得点
+
+  // --- 一掃（PERFECT）：1回の斬撃で画面内の敵を全滅させたボーナス ---
+  PERFECT_MIN_CHAIN: 15,   // 最低連鎖数
+  PERFECT_PER_CHAIN: 25,   // ボーナス＝連鎖数×25点
+
   // --- 描画 ---
   MAX_PARTICLES: 1100,     // 粒子の上限（混雑時は小さい火花から間引く）
   DPR_MAX: 2,              // Canvas内部解像度の上限
@@ -79,7 +90,7 @@ export const PHASES = [
 
 // 序盤の固定出現（0〜10秒：操作を即理解させる）
 export const OPENING = [
-  { t: 0.3, formation: 'clump', side: 'top',    n: 7, bombs: 0, thunders: 0 },
+  { t: 0,   formation: 'clump', side: 'top',    n: 8, bombs: 0, thunders: 0, inside: true }, // 最初の群れは画面内に出現（開始直後の空白をなくす）
   { t: 2.4, formation: 'clump', side: 'left',   n: 8, bombs: 1, thunders: 0 }, // 最初の爆弾型
   { t: 4.8, formation: 'line',  side: 'bottom', n: 6, bombs: 1, thunders: 0 },
   { t: 7.2, formation: 'clump', side: 'right',  n: 9, bombs: 2, thunders: 0 },
@@ -132,4 +143,6 @@ export const TIPS = [
   '斬ボタンを押したまま引っぱっても斬撃ルートを描ける。',
   '吸引型で散らばった敵を集め、そこに爆弾型が入れば大連鎖。',
   '分裂型の破片は十字に飛ぶ。向きは時間停止中に点線で見える。',
+  '敵をギリギリでかすめると「かすり」でゲージが回復する。避けながら攻めろ。',
+  '1回の斬撃で画面内の敵を全滅させると「一掃」ボーナス。',
 ];

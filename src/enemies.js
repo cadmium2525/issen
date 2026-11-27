@@ -245,6 +245,7 @@ export class Enemy {
     this.phase = rand(0, TAU);
     this.cutAngle = 0;
     this.cutOrder = 0;
+    this.grazeT = -99; // 最後にかすられた時刻（同じ敵から連続でかすりを取らせない）
   }
   // 出現直後・吸い寄せ中・はじき飛ばされ中は当たらない
   get harmful() {

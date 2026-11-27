@@ -165,6 +165,11 @@ export class Game {
     this.vortices = [];
     this.flyers = [];
     this.unbanked = 0;
+    this.grazes = 0;
+    this.grazeGain = 0;
+    this.grazeStreak = 0;
+    this.grazeStreakT = -99;
+    this.perfects = 0;
     this.fx.clear();
     this.player = {
       x: this.W / 2, y: (this.H || 800) * 0.56, vx: 0, vy: 0, angle: -Math.PI / 2,
@@ -352,6 +357,7 @@ export class Game {
     };
     this.gauge = 0;
     this.gaugeWasFull = false;
+    this.grazeGain = 0;
     this.act = { combo: 0, events: 0, gaugeBonus: 0, score: 0, lastKill: this.fxTime, finished: false, tierIdx: 0 };
     this.slashCount++;
     if (this.mode === 'play' && this.stats.firstSlash === null) this.stats.firstSlash = this.time;
@@ -527,17 +533,25 @@ export class Game {
     this._updatePending(gdt);
     updateEnemies(this.enemies, gdt, p.x, p.y, this.realTime, this.grid);
 
-    // 被弾判定
+    // 被弾判定とかすり判定
     if (this.mode === 'play' && p.invuln <= 0 && this.slash.phase === 'idle' && p.hp > 0) {
+      let hit = false;
       for (const e of this.enemies) {
         if (!e.alive || !e.harmful) continue;
-        const rr = p.r + e.r * 0.72;
         const dx = e.x - p.x, dy = e.y - p.y;
-        if (dx * dx + dy * dy < rr * rr) {
-          this._damage();
+        const d2 = dx * dx + dy * dy;
+        const rr = p.r + e.r * 0.72;
+        if (d2 < rr * rr) {
+          hit = true;
           break;
         }
+        const gr = p.r + e.r + CFG.GRAZE_MARGIN;
+        if (d2 < gr * gr && this.time - e.grazeT > CFG.GRAZE_COOLDOWN) {
+          e.grazeT = this.time;
+          this._graze(e);
+        }
       }
+      if (hit) this._damage();
     }
     if (this.enemies.some((e) => !e.alive)) this.enemies = this.enemies.filter((e) => e.alive);
   }
@@ -576,6 +590,35 @@ export class Game {
         this.store.data.tut.move = true;
         this.ui.hideHint('move');
       }
+    }
+  }
+
+  // かすり：当たらずにギリギリでかすめるとゲージ回復（斬撃1回ぶんにつき上限あり）
+  _graze(e) {
+    const p = this.player;
+    this.grazes++;
+    this.score += CFG.GRAZE_SCORE;
+    if (this.gauge < 1 && this.grazeGain < CFG.GRAZE_CAP) {
+      const add = Math.min(CFG.GRAZE_GAIN, CFG.GRAZE_CAP - this.grazeGain, 1 - this.gauge);
+      this.grazeGain += add;
+      this.gauge += add;
+      this.ui.grazePulse();
+    }
+    this.grazeStreak = this.time - this.grazeStreakT < 1.5 ? this.grazeStreak + 1 : 1;
+    this.grazeStreakT = this.time;
+    const dx = e.x - p.x, dy = e.y - p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const cx = p.x + (dx / d) * p.r * 1.4, cy = p.y + (dy / d) * p.r * 1.4;
+    const tang = Math.atan2(dy, dx) + Math.PI / 2;
+    this.fx.sparks(cx, cy, 4, '#ffffff', 170, 360, tang, 1.1, 1.5, [0.1, 0.22]);
+    this.fx.sparks(cx, cy, 3, '#6ff3ff', 130, 280, tang + Math.PI, 1.1, 1.5, [0.1, 0.22]);
+    this.fx.ring(p.x, p.y, p.r + 4, p.r + 30, 0.22, '#bff9ff', 2, true);
+    this.audio.graze(this.grazeStreak, (p.x / this.W) * 2 - 1);
+    if (!this.store.data.tut.graze) {
+      this.store.data.tut.graze = true;
+      const ty = Math.max(this.hudBottom + 40, p.y - 70);
+      this.fx.text('かすり！', p.x, ty, { size: 28, color: '#bff9ff', life: 1.8, vy: -10, jp: true });
+      this.fx.text('ギリギリで避けるとゲージ回復', clamp(p.x, 120, this.W - 120), ty + 30, { size: 15, color: '#ffffff', life: 1.8, vy: -10, jp: true, pop: 0 });
     }
   }
 
@@ -713,6 +756,8 @@ export class Game {
       tip: pick(TIPS),
       firstSlash: this.stats.firstSlash,
       slashes: this.slashCount,
+      grazes: this.grazes,
+      perfects: this.perfects,
     });
   }
 
@@ -747,8 +792,17 @@ export class Game {
     if (act && !act.finished && this.queue.length === 0 && this.vortices.length === 0 && this.fxTime - act.lastKill > 0.35) {
       act.finished = true;
       if (act.combo >= 2 && this.mode !== 'demo' && act.score > 0) {
-        // 得点がスコア表示へ飛んでいき、着地した瞬間にスコアへ加算される
-        this.flyers.push({ value: act.score, combo: act.combo, t: 0 });
+        // 画面内の敵を全滅させたら「一掃」ボーナス
+        let bonus = 0;
+        if (act.combo >= CFG.PERFECT_MIN_CHAIN && !this._enemiesOnScreen()) {
+          bonus = act.combo * CFG.PERFECT_PER_CHAIN;
+          this.score += bonus;
+          this.unbanked += bonus;
+          this.perfects++;
+          this._perfectFx(bonus);
+        }
+        // 得点がスコア表示へ飛んでいき、着地した瞬間にスコアへ加算される（一掃のときは称号を見せてから飛ぶ）
+        this.flyers.push({ value: act.score + bonus, combo: act.combo, t: bonus ? -0.5 : 0, perfect: bonus > 0 });
         // 連鎖数の表示と称号を消し、数字が得点に「換金」されて飛んでいくように見せる
         this.comboView = null;
         this.fx.texts = this.fx.texts.filter((t) => t.tag !== 'tier');
@@ -983,7 +1037,7 @@ export class Game {
     const thunders = take(count(spec.thunders, P.thunder));
     const splitters = take(count(spec.splitters, P.splitter));
 
-    const f = this._formation(spec.formation, spec.side, n);
+    const f = this._formation(spec.formation, spec.side, n, spec.inside);
     // 中心寄り：吸引型 → 爆弾型（1つおき）／外周寄り：雷撃型／分裂型は残りから均等に
     const order = f.pos.map((_, i) => i).sort((a, b) => f.d[a] - f.d[b]);
     const kinds = new Array(n).fill('normal');
@@ -1007,7 +1061,7 @@ export class Game {
     if (f.ring && this.mode === 'play') this.audio.warn();
   }
 
-  _formation(type, side, n) {
+  _formation(type, side, n, inside = false) {
     const W = this.W, H = this.H, M = 40;
     const pos = [];
     if (type === 'ring') {
@@ -1057,6 +1111,18 @@ export class Game {
       my += b / n;
     }
     for (const [a, b] of local) pos.push({ x: ex + lx * a + fx * b, y: ey + ly * a + fy * b });
+    if (inside) {
+      // 画面内に直接出現させる：群れの最後尾が画面の縁（上はHUDの下）から少し内側に来るまで前へずらす
+      let minB = 0;
+      for (const [, bb] of local) minB = Math.min(minB, bb);
+      const edgeIn = side === 'top' ? this.hudBottom + 24 : 40;
+      const S = M + edgeIn - minB;
+      for (const q of pos) {
+        q.x += fx * S;
+        q.y += fy * S;
+      }
+      return { pos, d: local.map(([a2, b2]) => Math.hypot(a2 - mx, b2 - my)), warn: pos.map((q) => ({ x: q.x, y: q.y, type: 'spot' })), ring: true };
+    }
     const wx = clamp(ex + fx * (M + 18), 18, W - 18);
     const wy = side === 'top' ? this.hudBottom + 14 : clamp(ey + fy * (M + 18), 18, H - 18);
     return {
@@ -1208,6 +1274,26 @@ export class Game {
     if (this.enemies.some((e) => e.alive && Math.hypot(e.x - p.x, e.y - p.y) < 270)) this.ui.showHint('slash');
   }
 
+  _enemiesOnScreen() {
+    const W = this.W, H = this.H;
+    return this.enemies.some((e) => e.alive && e.state === 'alive' && e.x > -4 && e.x < W + 4 && e.y > -4 && e.y < H + 4);
+  }
+
+  _perfectFx(bonus) {
+    const W = this.W, H = this.H;
+    this.fx.text('一 掃', W / 2, H * 0.42, {
+      size: 74, color: '#ffe36b', life: 1.6, vy: -6, jp: true, sub: `PERFECT  +${fmt(bonus)}`, tag: 'perfect', replace: 'perfect',
+    });
+    this.fx.flash(0.32, '#ffe36b');
+    this.fx.shake(0.35);
+    this.fx.punch(0.045);
+    this.fx.ring(W / 2, H / 2, 10, Math.max(W, H) * 0.75, 0.6, '#ffe36b', 8);
+    this.fx.ring(W / 2, H / 2, 10, Math.max(W, H) * 0.5, 0.45, '#ffffff', 3);
+    this.hitstop = Math.max(this.hitstop, 0.07);
+    this.audio.perfect();
+    this._vibe(60);
+  }
+
   _updateFlyers(dt) {
     for (let i = this.flyers.length - 1; i >= 0; i--) {
       const f = this.flyers[i];
@@ -1227,7 +1313,8 @@ export class Game {
     const x0 = this.W / 2, y0 = this.comboY - 22;
     const y1 = (this.safe.top + 34) / this.scale;
     for (const f of this.flyers) {
-      const big = Math.min(1.5, 1 + f.combo / 120);
+      if (f.t < 0) continue;
+      const big = Math.min(1.5, 1 + f.combo / 120) * (f.perfect ? 1.12 : 1);
       let x = x0, y = y0, sc, a = 1;
       if (f.t < 0.28) {
         sc = easeOutBack(Math.min(1, f.t / 0.2)) * big;
@@ -1484,6 +1571,28 @@ export class Game {
     ctx.drawImage(glowSprite('#3fd8ff', false), p.x - gs / 2, p.y - gs / 2, gs, gs);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
+    // かすりの圏内を示す点線の輪（敵が近づくほど濃くなる）
+    if (this.mode === 'play' && this.slash.phase === 'idle') {
+      let nd = 1e9;
+      for (const e of this.enemies) {
+        if (!e.alive || e.state !== 'alive') continue;
+        const d = Math.hypot(e.x - p.x, e.y - p.y) - e.r;
+        if (d < nd) nd = d;
+      }
+      const a = clamp(1 - (nd - p.r) / 70, 0, 1) * 0.45;
+      if (a > 0.02) {
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.strokeStyle = '#bff9ff';
+        ctx.lineWidth = 1.3;
+        ctx.setLineDash([3, 5]);
+        ctx.lineDashOffset = -this.realTime * 20;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r + 8 + CFG.GRAZE_MARGIN, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
     const blink = p.blink > 0 && Math.floor(this.realTime * 18) % 2 === 0;
     this._drawPlayerShape(ctx, p.x, p.y, p.angle, blink ? 0.3 : 1, false);
   }
